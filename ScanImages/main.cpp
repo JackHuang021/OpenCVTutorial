@@ -10,6 +10,8 @@ using namespace cv;
 
 static void help();
 static Mat& scanImageAndReduceC(Mat& img, const uint8_t* const table);
+static Mat& ScanImageAndReduceIterator(Mat& img, const uint8_t* table);
+static Mat& scanImageAndReduceRandomAccess(Mat& img, const uint8_t* table);
 
 int main(int argc, char* argv[])
 {
@@ -64,6 +66,46 @@ int main(int argc, char* argv[])
     cout << "time of reducing wiht C operator [] (average for "
          << times << " runs): " << t << " milliseconds." << endl;
 
+    t = (double)getTickCount();
+    for (int i = 0; i < times; i++)
+    {
+        Mat clone_i = img.clone();
+        dst = ScanImageAndReduceIterator(clone_i, table);
+    }
+    t = 1000 * ((double)getTickCount() - t) / getTickFrequency();
+    t /= times;
+    cout << "Time of reducing with the iterator (averaged for "
+        << times << " runs): " << t << " milliseconds."<< endl;
+
+    t = (double)getTickCount();
+    for (int i = 0; i < times; i++)
+    {
+        Mat clone_i = img.clone();
+        scanImageAndReduceRandomAccess(clone_i, table);
+    }
+    t = 1000 * ((double)getTickCount() - t) / getTickFrequency();
+    t /= times;
+    cout << "time of reducing with the on-the-fly address generation - at function "
+            "(averaged for " << times << " runs): " << t << " milliseconds" << endl;
+
+    Mat lookUpTable(1, 256, CV_8U);
+    uint8_t *p = lookUpTable.ptr();
+    for (int i = 0; i < 256; i++)
+        p[i] = table[i];
+
+    t = (double)getTickCount();
+    for (int i = 0; i < times; i++)
+        LUT(img, lookUpTable, dst);
+    t = 1000 * ((double)getTickCount() - t) / getTickFrequency();
+    t /= times;
+
+    cout << "Time of reducing with the LUT function (averaged for "
+        << times << " runs): " << t << " milliseconds."<< endl;
+
+    imshow("LUT Image", dst);
+    waitKey();
+    destroyAllWindows();
+
     return 0;
 }
 
@@ -106,6 +148,71 @@ static Mat& scanImageAndReduceC(Mat& img, const uint8_t* const table)
         {
             p[j] = table[p[j]];
         }
+    }
+
+    return img;
+}
+
+static Mat& ScanImageAndReduceIterator(Mat& img, const uint8_t* table)
+{
+    CV_Assert(img.depth() == CV_8U);
+
+    const int channels = img.channels();
+
+    switch (channels)
+    {
+    case 1:
+        {
+            MatIterator_<uint8_t> it;
+            MatIterator_<uint8_t> end;
+            for (it = img.begin<uint8_t>(), end = img.end<uint8_t>(); it != end; it++)
+            {
+                *it = table[*it];
+            }
+        }
+        break;
+    case 3:
+        {
+            MatIterator_<Vec3b> it;
+            MatIterator_<Vec3b> end;
+            for (it = img.begin<Vec3b>(), end = img.end<Vec3b>(); it != end; it++)
+            {
+                (*it)[0] = table[(*it)[0]];
+                (*it)[1] = table[(*it)[1]];
+                (*it)[2] = table[(*it)[2]];
+            }
+        }
+        break;
+    }
+
+    return img;
+}
+
+static Mat& scanImageAndReduceRandomAccess(Mat& img, const uint8_t* table)
+{
+    CV_Assert(img.depth() == CV_8U);
+
+    const int channels = img.channels();
+
+    switch (channels)
+    {
+    case 1:
+        for (int i = 0; i < img.rows; i++)
+            for (int j = 0; j < img.cols; i++)
+                img.at<uint8_t>(i, j) = table[img.at<uint8_t>(i, j)];
+        break;
+
+    case 3:
+        Mat_<Vec3b> img_copy = img;
+        for (int i = 0; i < img.rows; i++)
+            for (int j = 0; j < img.cols; j++)
+            {
+                img_copy(i, j)[0] = table[img_copy(i, j)[0]];
+                img_copy(i, j)[1] = table[img_copy(i, j)[1]];
+                img_copy(i, j)[2] = table[img_copy(i, j)[2]];
+            }
+        img = img_copy;
+        break;
     }
 
     return img;
