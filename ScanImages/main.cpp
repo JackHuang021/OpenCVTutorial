@@ -131,6 +131,7 @@ static Mat& scanImageAndReduceC(Mat& img, const uint8_t* const table)
     int nRows = img.rows;
     int nCols = img.cols * channels;
 
+    // 若是所有行连续存储的，直接连续访问，减少for循环时间
     if (img.isContinuous())
     {
         nCols *= nRows;
