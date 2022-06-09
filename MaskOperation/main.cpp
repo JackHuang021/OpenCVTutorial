@@ -1,90 +1,87 @@
-#include "opencv2/imgcodecs.hpp"
-#include "opencv2/highgui.hpp"
-#include "opencv2/imgproc.hpp"
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
 #include <iostream>
 
 using namespace std;
 using namespace cv;
 
-static void help(char* progName)
+namespace
 {
-    cout << endl
-         << "This program shows how to filter images with mask: the write it "
-            "youself and the filter2d way." << endl
-         << "Usage: " << progName << " [image_path -- default lena.jpg] [G -- "
-                                     "grayscale]" << endl;
+int alpha = 100;
+int beta = 100;
+int gamma_cor = 100;
+
+Mat img_original;
+Mat img_corrected;
+Mat img_gamma_corrected;
+
+void basicLinearTransform(const Mat& img, const double alpha_, const int beta_)
+{
+    Mat res;
+
+    img.convertTo(res, -1, alpha_, beta_);
+    hconcat(img, res, img_corrected);
+    imshow("Brightness and contrast adjustments", img_corrected);
 }
 
-static void sharpen(const Mat& src, Mat& dst);
+void gammaCorrection(const Mat& img, const double gamma_)
+{
+    CV_Assert(gamma_ >= 0);
 
+    Mat lookUpTable(1, 256, CV_8U);
+    uint8_t* p = lookUpTable.ptr();
+
+    for (int i = 0; i < 256; i++)
+        p[i] = saturate_cast<uint8_t>(pow(i / 255.0, gamma_) * 255.0 );
+
+    Mat res = img.clone();
+    LUT(img, lookUpTable, res);
+    hconcat(img, res, img_gamma_corrected);
+    imshow("Gamma correction", img_gamma_corrected);
+}
+
+void on_linear_transform_alpha_trackbar(int, void *)
+{
+    double alpha_value = alpha / 100.0;
+    int beta_value = beta - 100;
+    basicLinearTransform(img_original, alpha_value, beta_value);
+}
+
+void on_linear_transform_beta_trackbar(int, void *)
+{
+    double alpha_vlue = alpha / 100.0;
+    int beta_value = beta - 100;
+    basicLinearTransform(img_original, alpha_vlue, beta_value);
+}
+
+void on_gamma_correction_trackbar(int, void *)
+{
+    double gamma_value = gamma_cor / 100.0;
+    gammaCorrection(img_original, gamma_value);
+}
+
+}
 
 int main(int argc, char* argv[])
 {
-    help(argv[0]);
-    const char* filename = argc >= 2 ? argv[1] : "lena.jpg";
-
-    Mat src;
-    Mat dst1;
-    Mat dst2;
-
-    if (argc >= 3 && !(strcmp("G", argv[2])))
-        src = imread(samples::findFile(filename), IMREAD_GRAYSCALE);
-    else
-        src = imread(samples::findFile(filename), IMREAD_COLOR);
-
-    if (src.empty())
+    CommandLineParser parser(argc, argv, "{@input | lena.jpg | input image}");
+    img_original = imread(samples::findFile(parser.get<String>("@input")));
+    if (img_original.empty())
     {
-        cerr << "Can't open image [" << filename << "]" << endl;
-        return EXIT_FAILURE;
+        cout << "could not open or find the image." << endl;
+        cout << "Usage: " << argv[0] << " <input_image>" << endl;
+        return -1;
     }
 
-    namedWindow("Input");
-    namedWindow("Output");
+    img_corrected = Mat(img_original.rows, img_original.cols * 2, img_original.type());
+    img_gamma_corrected = Mat(img_corrected.rows, img_corrected.cols, img_corrected.type());
 
-    imshow("Input", src);
-    double  t = (double)getTickCount();
-    sharpen(src, dst1);
-    t = ((double)getTickCount() - t) / getTickFrequency();
-    cout << "hand written function time passed in seconds: " << t << endl;
-    imshow("Output", dst1);
-    waitKey();
+    hconcat(img_original, img_original, img_corrected);
+    hconcat(img_original, img_original, img_gamma_corrected);
 
-    Mat kernel = (Mat_<int8_t>(3, 3) << 0, -1, 0, -1, 5, -1, 0, -1, 0);
-    t = (double)getTickCount();
+    namedWindow("Brightness and contrast adjustments");
+    namedWindow("Gamma correction");
 
-    filter2D(src, dst2, src.depth(), kernel);
-    t = ((double)getTickCount() - t) / getTickFrequency();
-    cout << "built-in filter2D time passed in seconds: " << t << endl;
-    imshow("Output", dst2);
-    waitKey();
-
-    return EXIT_SUCCESS;
-}
-
-static void sharpen(const Mat& src, Mat& dst)
-{
-    CV_Assert(src.depth() == CV_8U);
-    
-    const int channels = src.channels();
-    dst.create(src.size(), src.type());
-    
-    for (int i = 1; i < src.rows - 1; i++)
-    {
-        const uint8_t* previous = src.ptr<uint8_t>(i - 1);
-        const uint8_t* current = src.ptr<uint8_t>(i);
-        const uint8_t* next = src.ptr<uint8_t>(i + 1);
-        
-        uint8_t* out = dst.ptr<uint8_t>(i);
-        for (int j = channels; j < channels * (src.cols - 1); j++)
-        {
-            *out = saturate_cast<uint8_t>(5 * current[j] - current[j - channels]
-                    - current[j + channels] - previous[j] - next[j]);
-            out++;
-        }
-    }
-
-    dst.row(0).setTo(Scalar(0));
-    dst.row(dst.rows - 1).setTo(Scalar(0));
-    dst.col(0).setTo(Scalar(0));
-    dst.col(dst.cols - 1).setTo(Scalar(0));
+//    createTrackbar("Alpha gain (contrast)", "Brightness and contrast adjustments",
+//                   &alpha, 500)
 }
