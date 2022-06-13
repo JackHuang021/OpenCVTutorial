@@ -34,6 +34,7 @@ int main(int argc, char* argv[])
 
     Mat bw;
     /* 将原始灰度图像进行取反操作后再进行二值化操作 */
+    /* 自适应阈值函数 */
     /* ADAPTIVE_THRESH_MEAN_C方法，阈值T为 bloskSize*blockSize 邻域内(x, y)减去第七个参数C的平均值 */
     adaptiveThreshold(~gray, bw, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY, 15, -2);
 
@@ -42,19 +43,22 @@ int main(int argc, char* argv[])
     Mat horizontal = bw.clone();
     Mat vertical = bw.clone();
 
-    int horizontalSize = horizontal.cols / 30;
+    int horizontalSize = horizontal.cols / 10;
     Mat horizontalStructure = getStructuringElement(MORPH_RECT, Size(horizontalSize, 1));
 
-    erode(horizontal, horizontal, horizontalStructure);
-    dilate(horizontal, horizontal, horizontalStructure);
+    /* 使用一个水平线结构提取当前图片的水平直线，使用开操作提取，先腐蚀后膨胀，下面两种方法均可 */
+//    erode(horizontal, horizontal, horizontalStructure);
+//    dilate(horizontal, horizontal, horizontalStructure);
+    morphologyEx(horizontal, horizontal, MORPH_OPEN, horizontalStructure);
 
     showWaitDestory("Horizontal", horizontal);
 
-    int verticalSize = vertical.cols / 30;
+    int verticalSize = vertical.rows / 30;
     Mat  verticalStructure = getStructuringElement(MORPH_RECT, Size(1, verticalSize));
 
-    erode(vertical, vertical, verticalStructure);
-    dilate(vertical, vertical, verticalStructure);
+//    erode(vertical, vertical, verticalStructure);
+//    dilate(vertical, vertical, verticalStructure);
+    morphologyEx(vertical, vertical, MORPH_OPEN, verticalStructure);
 
     showWaitDestory("Vertical", vertical);
 
@@ -73,6 +77,8 @@ int main(int argc, char* argv[])
     vertical.copyTo(smooth);
 
     blur(smooth, smooth, Size(2, 2));
+
+    showWaitDestory("Smooth", smooth);
 
     smooth.copyTo(vertical, edges);
 
